@@ -115,7 +115,10 @@ def unascii_armor_tx(armor):
 
 def unascii_armor_tx_gui(parent, armor):
     try:
-        return unascii_armor_tx(armor)
+        if re.match('^[0-9a-fA-F]*$', armor):
+            return armor
+        else:
+            return unascii_armor_tx(armor)
     except TypeError as e:
         QMessageBox.critical(parent, 'Error', str(e))
         return None
@@ -329,6 +332,7 @@ class SignOffTab(QWidget):
         tx = unascii_armor_tx_gui(self, str(self.txEdit.toPlainText()))
         if tx == None:
             return
+        self.txEdit.setPlainText(ascii_armor_tx(tx))
         txd = deserialize(tx)
 
         for ucwl in self.unspentCoinsWidgetList:
