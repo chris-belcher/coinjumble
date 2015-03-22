@@ -123,7 +123,7 @@ def unascii_armor_tx_gui(parent, armor):
         QMessageBox.critical(parent, 'Error', str(e))
         return None
 
-class ListUnspentCoinsTab(QWidget):
+class ListUnspentCoinsTab(QScrollArea):
     def __init__(self):
         super(ListUnspentCoinsTab, self).__init__()
         self.initUI()
@@ -134,8 +134,11 @@ class ListUnspentCoinsTab(QWidget):
 #3M8XGFBKwkf7miBzpkU3x2DoWwAVrD1mhk - 55 utxo, the coinjoin bounty address
 
     def initUI(self): #TODO have a look at using QFormLayout here
+        listUnspentTab = QWidget()
+        self.setWidget(listUnspentTab)
+        self.setWidgetResizable(True)
         self.grid = QGridLayout()
-        self.setLayout(self.grid)
+        listUnspentTab.setLayout(self.grid)
         self.grid.setSpacing(10)
         self.grid.addWidget(QLabel('Address :'), 1, 0)
         self.addressInputEdit = QLineEdit()
@@ -162,6 +165,7 @@ class ListUnspentCoinsTab(QWidget):
                 #plus right-click option to copy, and responds to ctrl+c
                 QLineEdit(utxo['output'])
             )
+            unspentCoinDisplay[1].setReadOnly(True)
             self.unspentCoinDisplayList.append(unspentCoinDisplay)
             for i in range(2):
                 self.grid.addWidget(unspentCoinDisplay[i], len(self.unspentCoinDisplayList)+1, i)
@@ -297,14 +301,18 @@ class CombineTransactionPartsTab(QWidget):
 #TODO somewhere do checking that sum of outputs <= sum of inputs
 # and other simple checks that a node or client would do
 # then again, the site connected to by pushtx() will do these checks
-class SignOffTab(QWidget):
+class SignOffTab(QScrollArea):
     def __init__(self):
         super(SignOffTab, self).__init__()
         self.initUI()
 
     def initUI(self):
+        signOffTab = QWidget()
+        self.setWidget(signOffTab)
+        self.setWidgetResizable(True)
+
         self.grid = QGridLayout()
-        self.setLayout(self.grid)
+        signOffTab.setLayout(self.grid)
         self.grid.setSpacing(10)
 
         self.txEdit = QPlainTextEdit(self)
@@ -315,8 +323,10 @@ class SignOffTab(QWidget):
         viewTxButton.clicked.connect(self.clickedViewTxButton)
         self.grid.addWidget(viewTxButton, 1, 0, 1, 4)
 
-        self.grid.addWidget(QLabel('Unspent Coins'), 2, 1, 1, 1, QtCore.Qt.AlignHCenter)
-        self.grid.addWidget(QLabel('Outputs'), 2, 3, 1, 1, QtCore.Qt.AlignHCenter)
+        self.unspentCoinsLabel = QLabel('<u>Unspent Coins</u>')
+        self.outputsLabel = QLabel('<u>Outputs</u>')
+        self.grid.addWidget(self.unspentCoinsLabel, 2, 1, 1, 1, QtCore.Qt.AlignHCenter)
+        self.grid.addWidget(self.outputsLabel, 2, 3, 1, 1, QtCore.Qt.AlignHCenter)
         #TODO QLabel somewhere with sum of inputs / outputs / fee
 
         self.broadcastTxButton = QPushButton('Broadcast Transaction', self)
@@ -346,6 +356,7 @@ class SignOffTab(QWidget):
         self.outputsWidgetList = []
         self.grid.removeWidget(self.broadcastTxButton)
         self.signedCount = 0
+        self.unspentCount = 0
 
         self.inputSum = 0 #in satoshi
         self.outputSum = 0
@@ -359,6 +370,7 @@ class SignOffTab(QWidget):
             # a proper error that you need a popup box asking if your internet works
             ftx = blockr_fetchtx_cache(inputs['outpoint']['hash'], get_network())
             scr_val = deserialize(ftx)['outs'][inputs['outpoint']['index']]
+            self.inputSum += scr_val['value']
             buttonText = 'Unsigned'
             if inputs['script'] != '':
                 if verify_tx_input(tx, index, scr_val['script'], *deserialize_script(inputs['script'])):
@@ -370,12 +382,19 @@ class SignOffTab(QWidget):
             signButton.setEnabled(buttonText != 'Signed')
             signButton.clicked.connect(self.clickedSignButton)
 
-            self.inputSum += scr_val['value']
+            utxo = inputs['outpoint']['hash'] + ':' + str(inputs['outpoint']['index'])
+            addr = script_to_address(scr_val['script'], get_vbyte())
+            utxoList = blockr_unspent(addr, get_network())
+            utxoList = [u['output'] for u in utxoList]
+            spentStatus = 'Unspent' if utxo in utxoList else '<font color="red">Spent</font>'
+            if spentStatus == 'Unspent':
+                self.unspentCount += 1
+
             unspentCoinsWidgets = (
                 signButton,
-                QLabel('<b>' + inputs['outpoint']['hash'] + ':' + str(inputs['outpoint']['index']) +
+                QLabel('<b>' + utxo +
                     '</b> (' + str(Decimal(scr_val['value'])/Decimal(1e8)) + 'btc)'),
-                QLabel(script_to_address(scr_val['script'], get_vbyte()))
+                QLabel(addr + ' <b>' + spentStatus + '</b>')
             )
             self.grid.addWidget(unspentCoinsWidgets[0], len(self.unspentCoinsWidgetList)*2 + 3, 0)
             self.grid.addWidget(unspentCoinsWidgets[1], len(self.unspentCoinsWidgetList)*2 + 3, 1)
@@ -389,9 +408,17 @@ class SignOffTab(QWidget):
             self.outputsWidgetList.append(outputWidgets)
 
         self.grid.addWidget(QLabel('=====>'), 3, 2, 1, 1, QtCore.Qt.AlignHCenter)
+
+        self.unspentCoinsLabel.setText('<u>Unspent Coins</u> Total value: ' +
+            str(Decimal(self.inputSum)/Decimal(1e8)) + 'btc')
+        self.outputsLabel.setText('<u>Outputs</u> Total value: ' +
+            str(Decimal(self.inputSum)/Decimal(1e8)) + 'btc')
+
         broadcastRow = max(len(self.unspentCoinsWidgetList), len(self.outputsWidgetList))*2 + 5
         self.grid.addWidget(self.broadcastTxButton, broadcastRow, 0, 1, 4)
-        self.broadcastTxButton.setEnabled(self.signedCount == len(self.unspentCoinsWidgetList))
+        canBroadcast = self.signedCount == len(self.unspentCoinsWidgetList) and \
+            self.unspentCount == len(self.unspentCoinsWidgetList)
+        self.broadcastTxButton.setEnabled(canBroadcast)
 
     def clickedSignButton(self, checked):
         index = -1
