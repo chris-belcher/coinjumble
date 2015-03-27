@@ -298,6 +298,11 @@ class CombineTransactionPartsTab(QWidget):
         self.resultEdit.selectAll()
         self.txEdit.setPlainText('')
 
+class QLabelSelectable(QLabel):
+    def __init__(self, *args, **kwargs):
+        super(QLabelSelectable, self).__init__(*args, **kwargs)
+        self.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
+
 #TODO somewhere do checking that sum of outputs <= sum of inputs
 # and other simple checks that a node or client would do
 # then again, the site connected to by pushtx() will do these checks
@@ -392,16 +397,16 @@ class SignOffTab(QScrollArea):
 
             unspentCoinsWidgets = (
                 signButton,
-                QLabel('<b>' + utxo +
+                QLabelSelectable('<b>' + utxo +
                     '</b> (' + str(Decimal(scr_val['value'])/Decimal(1e8)) + 'btc)'),
-                QLabel(addr + ' <b>' + spentStatus + '</b>')
+                QLabelSelectable(addr + ' <b>' + spentStatus + '</b>')
             )
             self.grid.addWidget(unspentCoinsWidgets[0], len(self.unspentCoinsWidgetList)*2 + 3, 0)
             self.grid.addWidget(unspentCoinsWidgets[1], len(self.unspentCoinsWidgetList)*2 + 3, 1)
             self.grid.addWidget(unspentCoinsWidgets[2], len(self.unspentCoinsWidgetList)*2 + 4, 1, QtCore.Qt.AlignHCenter)
             self.unspentCoinsWidgetList.append(unspentCoinsWidgets)
         for o in txd['outs']:
-            outputWidgets = QLabel('<b>' + script_to_address(o['script'], get_vbyte()) +
+            outputWidgets = QLabelSelectable('<b>' + script_to_address(o['script'], get_vbyte()) +
                 '</b> (' + str(Decimal(o['value'])/Decimal(1e8)) + 'btc)')
             self.outputSum += o['value']
             self.grid.addWidget(outputWidgets, len(self.outputsWidgetList)*2 + 3, 3)
