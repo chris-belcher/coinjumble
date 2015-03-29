@@ -417,7 +417,7 @@ class SignOffTab(QScrollArea):
         self.unspentCoinsLabel.setText('<u>Unspent Coins</u> Total value: ' +
             str(Decimal(self.inputSum)/Decimal(1e8)) + 'btc')
         self.outputsLabel.setText('<u>Outputs</u> Total value: ' +
-            str(Decimal(self.inputSum)/Decimal(1e8)) + 'btc')
+            str(Decimal(self.outputSum)/Decimal(1e8)) + 'btc')
 
         broadcastRow = max(len(self.unspentCoinsWidgetList), len(self.outputsWidgetList))*2 + 5
         self.grid.addWidget(self.broadcastTxButton, broadcastRow, 0, 1, 4)
