@@ -15,7 +15,7 @@
 '''
 
 
-import sys, base64, textwrap, re, datetime
+import sys, base64, textwrap, re, datetime, traceback, string
 
 from decimal import Decimal
 
@@ -96,13 +96,16 @@ def ascii_armor_tx(tx):
 def unascii_armor_tx_ex(armor, network):
      armor = textwrap.dedent(armor).strip()
      head, foot = get_ascii_head_foot(network)
-     if not armor.startswith(head + '\n') or \
-         not armor.endswith('\n' + foot):
+     if not armor.startswith(head) or \
+         not armor.endswith(foot):
          raise TypeError('Bad header/footer lines. Are you on the right network? (testnet / mainnet)')
-     armor = armor[len(head)+1:] #strip header
-     armor = armor[:-len(foot)-1]
-     b64_payload = ''.join(armor.split('\n'))
-     payload = base64.b64decode(b64_payload)
+     for w in string.whitespace:
+         armor = armor.replace(w, '')
+         head = head.replace(w, '')
+         foot = foot.replace(w, '')
+     armor = armor[len(head):] #strip header
+     armor = armor[:-len(foot)]
+     payload = base64.b64decode(armor)
      tx = payload[:-4]
      checksum = bin_dbl_sha256(tx)[:4]
      p_checksum = payload[-4:]
@@ -146,7 +149,7 @@ class ListUnspentCoinsTab(QScrollArea):
         listCoinsButton = QPushButton("List Unspent Coins")
         listCoinsButton.clicked.connect(self.clickedListCoinsButton)
         self.grid.addWidget(listCoinsButton, 1, 2)
-        self.unspentCoinDisplayList = [] #TODO needs some kind of scrollbar in case theres a huge amount of utxo
+        self.unspentCoinDisplayList = []
 
     def clickedListCoinsButton(self, checked):
         for ucdl in self.unspentCoinDisplayList:
@@ -225,8 +228,12 @@ class CreateTransactionPartTab(QWidget):
         utxo = []
         for ucel in self.unspentCoinEditList:
             newutxo = str(ucel.text()).strip()
-            if newutxo != '':
-                utxo.append({'output': newutxo})
+            if len(newutxo) < 66 or not re.match('^[0-9a-fA-F:]*$', newutxo) or\
+                newutxo[64] != ':' or not newutxo[65:].isdigit():
+                QMessageBox.critical(self, 'Create Transaction Part', 'Invalid unspent coin format',
+                    QMessageBox.Ok, QMessageBox.NoButton)
+                return
+            utxo.append({'output': newutxo})
             self.grid.removeWidget(ucel)
             ucel.hide()
         self.unspentCoinEditList = []
@@ -241,7 +248,12 @@ class CreateTransactionPartTab(QWidget):
                 self.grid.removeWidget(wid)
                 wid.hide()
         self.outputEditList = []
-        self.txEdit.setPlainText(ascii_armor_tx(mktx(utxo, outs)))
+        try:
+            self.txEdit.setPlainText(ascii_armor_tx(mktx(utxo, outs)))
+        except RuntimeError as e:
+            traceback.print_exc()
+            QMessageBox.critical(self, 'Create Transaction Part', 'Runtime Error with make transaction. See terminal.',
+                QMessageBox.Ok, QMessageBox.NoButton)
         self.txEdit.selectAll()
 
     def clickedAddUnspentCoinButton(self, checked):
@@ -281,11 +293,8 @@ class CombineTransactionPartsTab(QWidget):
 
     def clickedCombineTxPartsButton(self, checked):
         head, foot = get_ascii_head_foot(get_network())
-        matches = re.finditer('(' + head + '[0-9A-Za-z+/=\n]*' + foot + ')',
+        matches = re.finditer('(' + head + '[0-9A-Za-z+/=\n\t ]*' + foot + ')',
             str(self.txEdit.toPlainText()), re.MULTILINE | re.DOTALL)
-        if matches == None:
-            print('no header/footers found')
-            return
         result = None
         for m in matches:
             tx = deserialize(unascii_armor_tx(m.group(1)))
@@ -294,6 +303,10 @@ class CombineTransactionPartsTab(QWidget):
             else:
                 result['ins'] = result['ins'] + tx['ins']
                 result['outs'] = result['outs'] + tx['outs']
+        if not result:
+            QMessageBox.critical(self, 'Combine Transaction Parts', 'Unable to parse transaction parts',
+                QMessageBox.Ok, QMessageBox.NoButton)
+            return
         self.resultEdit.setPlainText(ascii_armor_tx(serialize(result)))
         self.resultEdit.selectAll()
         self.txEdit.setPlainText('')
@@ -330,9 +343,10 @@ class SignOffTab(QScrollArea):
 
         self.unspentCoinsLabel = QLabel('<u>Unspent Coins</u>')
         self.outputsLabel = QLabel('<u>Outputs</u>')
+        self.minerFeeLabel = QLabel('')
         self.grid.addWidget(self.unspentCoinsLabel, 2, 1, 1, 1, QtCore.Qt.AlignHCenter)
         self.grid.addWidget(self.outputsLabel, 2, 3, 1, 1, QtCore.Qt.AlignHCenter)
-        #TODO QLabel somewhere with sum of inputs / outputs / fee
+        self.grid.addWidget(self.minerFeeLabel, 2, 2, 1, 1, QtCore.Qt.AlignHCenter)
 
         self.broadcastTxButton = QPushButton('Broadcast Transaction', self)
         self.broadcastTxButton.setEnabled(False)
@@ -418,6 +432,8 @@ class SignOffTab(QScrollArea):
             str(Decimal(self.inputSum)/Decimal(1e8)) + 'btc')
         self.outputsLabel.setText('<u>Outputs</u> Total value: ' +
             str(Decimal(self.outputSum)/Decimal(1e8)) + 'btc')
+        self.minerFeeLabel.setText('Miner fee: ' +
+            str(Decimal(self.inputSum - self.outputSum)/Decimal(1e8)) + 'btc')
 
         broadcastRow = max(len(self.unspentCoinsWidgetList), len(self.outputsWidgetList))*2 + 5
         self.grid.addWidget(self.broadcastTxButton, broadcastRow, 0, 1, 4)
