@@ -309,7 +309,7 @@ class CombineTransactionPartsTab(QWidget):
             return
         self.resultEdit.setPlainText(ascii_armor_tx(serialize(result)))
         self.resultEdit.selectAll()
-        self.txEdit.setPlainText('')
+        #self.txEdit.setPlainText('')
 
 class QLabelSelectable(QLabel):
     def __init__(self, *args, **kwargs):
