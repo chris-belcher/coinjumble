@@ -126,6 +126,11 @@ def unascii_armor_tx_gui(parent, armor):
         QMessageBox.critical(parent, 'Error', str(e))
         return None
 
+class QLabelSelectable(QLabel):
+    def __init__(self, *args, **kwargs):
+        super(QLabelSelectable, self).__init__(*args, **kwargs)
+        self.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
+
 class ListUnspentCoinsTab(QScrollArea):
     def __init__(self):
         super(ListUnspentCoinsTab, self).__init__()
@@ -163,7 +168,7 @@ class ListUnspentCoinsTab(QScrollArea):
         print(str(len(utxos)) + ' found utxo')
         for utxo in utxos: #TODO value needs to go in a QLineEdit so it can be copypasted away
             unspentCoinDisplay = ( #not so urgent though since most people will be coinjoining round numbers
-                QLabel('Value: ' + str(Decimal(utxo['value'])/Decimal(1e8)) + 'btc'),
+                QLabelSelectable('Value: ' + str(Decimal(utxo['value'])/Decimal(1e8)) + 'btc'),
                 #TODO create subclass of QLineEdit that isnt editable and highlights it when you click
                 #plus right-click option to copy, and responds to ctrl+c
                 QLineEdit(utxo['output'])
@@ -310,11 +315,6 @@ class CombineTransactionPartsTab(QWidget):
         self.resultEdit.setPlainText(ascii_armor_tx(serialize(result)))
         self.resultEdit.selectAll()
         #self.txEdit.setPlainText('')
-
-class QLabelSelectable(QLabel):
-    def __init__(self, *args, **kwargs):
-        super(QLabelSelectable, self).__init__(*args, **kwargs)
-        self.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
 
 #TODO somewhere do checking that sum of outputs <= sum of inputs
 # and other simple checks that a node or client would do
